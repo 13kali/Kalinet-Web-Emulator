@@ -83,7 +83,7 @@ function ioWrite(port, value) {
 
 // STAGE 2 CODE //
 
-var RAMSTART = 0xfe00, RS_ADDR = 0xff00, PS_ADDR = 0xfffa;
+var RAMSTART = 0xfe50, RS_ADDR = 0xff00, PS_ADDR = 0xfffa;
 
 function runStage2() {
 	try {
@@ -266,25 +266,37 @@ var immFuncs = {
 };
 
 var nFuncs = {
-	"RAMSTART": makeConstant(RAMSTART),
+	"SYSVARS": makeConstant(RAMSTART),
+	"GRID_MEM": makeConstant(RAMSTART+0xA0),
 	"RS_ADDR": makeConstant(RS_ADDR),
 	"PS_ADDR": makeConstant(PS_ADDR),
 	"(": immFuncs["("],
-	"A,": function(state) {
+	"C,": function(state) {
 		addByte(state.main.ppop(state));
 	},
-	"A,,": function(state) {
+	"C,,": function(state) {
 		addWord(state.main.ppop(state));
 	},
 	",": function(state) { // same as A,,
 		addWord(state.main.ppop(state));
 	},
+	"T!": function(state) {
+		var addr = state.main.ppop(state);
+		var val = state.main.ppop(state);
+		forthState.writeWord(addr, val >>> 0);
+	},
+	"ALLOT0": function(state) {
+		var count = state.main.ppop(state);
+		for(var i = 0 ; i < count; i++) {
+			addByte(0);
+		}
+	},
 	"ORG": makeConstant(0xe000), // address where ORG is stored
 	"BIN(": makeConstant(0xe002), // address where BIN( is stored
-	"H@": function(state) {
+	"HERE": function(state) {
 		state.main.ppush(state, state.xcomp.here);
 	},
-	"PC": function(state) { // same as H@
+	"PC": function(state) { // same as HERE
 		state.main.ppush(state, state.xcomp.here);
 	},
 	"XCURRENT_!": function(state) {
@@ -302,10 +314,26 @@ var nFuncs = {
 		addByte(name.length);
 		state.xcomp.current = state.xcomp.here;
 	},
-	"JSCODE": function(state) {
+	"NATIVE": function(state) {
 		nFuncs["(entry)"](state);
 		addByte(0); // native
-		addByte(state.main.ppop(state));
+		addByte(state.nativeidx);
+		state.nativeidx++;
+	},
+	"CONSTANT": function(state) {
+		nFuncs["(entry)"](state);
+		addByte(6); // constant
+		addWord(state.main.ppop(state));
+	},
+	":*": function(state) {
+		nFuncs["(entry)"](state);
+		addByte(4); // alias
+		addWord(state.main.ppop(state));
+	},
+	":**": function(state) {
+		nFuncs["(entry)"](state);
+		addByte(5); // ialias
+		addWord(state.main.ppop(state));
 	},
 	":": function(state) {
 		nFuncs["(entry)"](state);
@@ -317,7 +345,7 @@ var nFuncs = {
 			var func = immFuncs[word];
 			if (func !== undefined) {
 				func(forthState);
-			} else if (/^[0-9]+$|^0x?[0-9a-fA-F]+$/.test(word) && word != "0" && word != "-1" && word != "1") {
+			} else if (/^-?[0-9]+$|^0x?[0-9a-fA-F]+$/.test(word)) {
 				addWordref("(n)");
 				addWord(word-0|0);
 			} else if (/^'.'$/.test(word)) {
@@ -352,6 +380,20 @@ var nFuncs = {
 	"EOT,": function(state) {
 		addByte(4);
 	},
+	'XWRAP"': function(state) {
+		addByte('_'.charCodeAt(0));
+		addWord(state.xcomp.here - state.xcomp.current);
+		addByte(1);
+		state.xcomp.current = state.xcomp.here;
+		forthState.writeWord(0xe008 /* ORG + 8 = LATEST */, state.xcomp.here >>> 0);
+		var ch = scriptBuffer.charCodeAt(scriptPos++);
+		while(ch != '"'.charCodeAt(0)) {
+			addByte(ch);
+			ch = scriptBuffer.charCodeAt(scriptPos++);
+			if (isNaN(ch)) throw "unterminated string literal";
+		}
+		addByte(4);
+	},
 };
 
 
@@ -360,7 +402,7 @@ function bootstrapStage1() {
 	console.time("Bootstrap");
 	try {
 		statusLen = 0;
-		scriptBuffer = document.getElementById("codetext").value.replace(/\r|\n|\t/g, " ").replace("H@ XCURRENT !", "H@ XCURRENT_!").replace(/XCURRENT @ _xapply/g, "XCURRENT-@-_xapply")+" ";
+		scriptBuffer = document.getElementById("codetext").value.replace(/\r|\n|\t/g, " ").replace("HERE 4 + XCURRENT !", "HERE 4 + XCURRENT_!").replace(/XCURRENT @ _xapply/g, "XCURRENT-@-_xapply")+" ";
 		if (scriptBuffer.indexOf("###P1### )") != -1)
 			scriptBuffer = scriptBuffer.substring(scriptBuffer.indexOf("###P1### )") + 10);
 		scriptPos = 0;
@@ -372,6 +414,7 @@ function bootstrapStage1() {
 		forthState.psp = PS_ADDR;
 		forthState.rsp = RS_ADDR;
 		forthState.xcomp = {current: 0, here: 0, builtins: {}};
+		forthState.nativeidx = 0;
 		for(var i = 0; i < forthState.builtins.length; i++) {
 			var f = forthState.builtins[i];
 			forthState.xcomp.builtins[f.funcname] = f;

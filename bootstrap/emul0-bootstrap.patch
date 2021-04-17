@@ -1,0 +1,41 @@
+--- emul0-bootstrap.fs
++++ emul0-bootstrap.fs
+@@ -469,7 +469,7 @@
+ 
+ : COLS 80 ; : LINES 25 ;
+ : CURSOR! ( new old -- )
+-    DROP COLS /MOD 6 PC! ( y ) 5 PC! ( x ) ;
++    DROP DROP ;
+ : CELL! ( c pos -- ) 0 CURSOR! 0 PC! ;
+ 
+ ( scrollback buffer )
+@@ -480,12 +480,9 @@
+ ( #=240 )
+ ( Grid subsystem. See doc/grid.txt. Load range: B240-B241 )
+ : XYPOS [ GRID_MEM LITN ] ; : XYMODE [ GRID_MEM LITN ] 2 + ;
+-'? CURSOR! NIP NOT [IF] : CURSOR! 2DROP ; [THEN]
+ : XYPOS! COLS LINES * MOD DUP XYPOS @ CURSOR! XYPOS ! ;
+ : AT-XY ( x y -- ) COLS * + XYPOS! ;
+-'? NEWLN NIP NOT [IF]
+ : NEWLN ( ln -- ) COLS * DUP COLS + SWAP DO SPC I CELL! LOOP ;
+-[THEN]
+ : _lf XYMODE C@ IF EXIT THEN
+     XYPOS @ COLS / 1+ LINES MOD DUP NEWLN
+     COLS * XYPOS! ;
+@@ -514,7 +511,6 @@
+     ['] (emit) ['] EMIT **! ['] (key?) ['] KEY? **!
+     ['] MEM< C<* !
+     INTERPRET
+-    W" _sys" (entry)
+     LIT" Collapse OS" STYPE (main) ;
+ XCURRENT @ _xapply ORG @ 0x04 ( stable ABI BOOT ) + T!
+ ( #=237 )
+@@ -559,3 +555,7 @@
+ : [COMPILE] ' , ; IMMEDIATE
+ : ['] ' LITN ; IMMEDIATE
+ XWRAP" INIT$ "
++
++ORG @ 256 /MOD 2 PC! 2 PC!
++HERE 256 /MOD 2 PC! 2 PC!
++0 2 PC!
+\ No newline at end of file
