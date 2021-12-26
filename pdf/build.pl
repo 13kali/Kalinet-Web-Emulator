@@ -7,7 +7,7 @@ use MIME::Base64;
 
 my $snapshot='2021-09-24';
 my $timestamp = strftime("%Y-%m-%d %H:%M:%S", localtime time);
-my $path = "../collapseos/doc/";
+my $path = "../kalinetos/doc/";
 
 my @filelist = split($/, <<'DONE');
 	=General Documentation
