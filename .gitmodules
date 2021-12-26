@@ -1,3 +1,3 @@
-[submodule "collapseos"]
-	path = collapseos
-	url = https://github.com/schierlm/collapseos
+[submodule "kalinetos"]
+	path = kalinetos
+	url = https://kalinet.site
